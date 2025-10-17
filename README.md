@@ -1,4 +1,4 @@
-# M5Stack
+# LoraWan Station
 Projecte de Síntesi
 
 El projecte consisteix en la connexió de diferents dispositius de mesura de variables físiques a LoRaWAN.
