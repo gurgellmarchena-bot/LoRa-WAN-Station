@@ -1,0 +1,150 @@
+#include <Arduino.h>
+#include <M5UnitENV.h>
+#include <M5Unified.h>
+#include <M5GFX.h>  // Opcional para fuentes personalizadas, pero incluido por compatibilidad
+#include <lmic.h>
+#include <hal/hal.h>
+#include <SPI.h>
+
+
+SHT3X sht30;    // Sensor de temperatura y humedad
+QMP6988 qmp6988;  // Sensor de presión
+
+
+#define LED_TWO  25
+// Claus OTAA (substitueix-les per les teves de TTN)
+static const u1_t PROGMEM APPEUI[8] = { 0x0C, 0x0B, 0x0A, 0x05, 0x04, 0x03, 0x02, 0x01 };
+static const u1_t PROGMEM DEVEUI[8] = { 0x90, 0xB3, 0xD5, 0x7E, 0xD0, 0x07, 0x19, 0x5F }; // De moment he canviat el MSB per cada dispositiu programat
+static const u1_t PROGMEM APPKEY[16] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,0x08 ,0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x00 };
+
+void os_getArtEui(u1_t* buf) { memcpy_P(buf, APPEUI, 8); }
+void os_getDevEui(u1_t* buf) { memcpy_P(buf, DEVEUI, 8); }
+void os_getDevKey(u1_t* buf) { memcpy_P(buf, APPKEY, 16); }
+
+unsigned long startTime = 0;  // Tiempo de inicio
+const unsigned long dimTimeout = 10000;
+unsigned long lastActivity = 0;  
+const unsigned long inactivityTimeout = 30000;
+
+uint8_t battery = M5.Power.getBatteryLevel();
+
+int allWhite = !allWhite;
+int dimmed;
+
+int temp, hum, pres;
+
+void setup() {
+  auto cfg = M5.config();
+  M5.begin(cfg);
+  
+  // Inicializar los sensores ENV III con Wire (I2C inicializado por M5.begin()).
+  if (!sht30.begin(&Wire, 0x44)) {
+    Serial.println("Error inicializando SHT30");
+    while (1) delay(1);  // Detener si falla
+  }
+  if (!qmp6988.begin(&Wire, 0x70)) {
+    Serial.println("Error inicializando QMP6988");
+    while (1) delay(1);  // Detener si falla
+  }
+  
+  M5.Lcd.setRotation(1); // Opcional: Rotar la pantalla para mejor visualización
+  M5.Lcd.setFont(&fonts::FreeSansBold12pt7b);
+  M5.Lcd.setTextDatum(top_center);
+  M5.Lcd.setCursor(M5.Lcd.width() / 2, 0);
+  //M5.Lcd.println("Sensor ENV III");
+
+
+}
+
+void loop() {
+
+  M5.update();  // Actualizar el estado de los botones y touch
+
+  uint8_t battery = M5.Power.getBatteryLevel();
+
+  // Verificar si hay actividad (presión de botones)
+  if (M5.BtnA.wasPressed() || M5.BtnB.wasPressed() || M5.BtnC.wasPressed()) {
+    lastActivity = millis();
+  }
+
+  // Verificar si ha pasado el tiempo de inactividad
+  if (millis() - lastActivity > inactivityTimeout) {
+    M5.Power.deepSleep();  // Entrar en modo deep sleep (mínimo consumo de energía)
+  }
+
+  if (allWhite = false || M5.BtnA.wasPressed()) {
+    allWhite = true;
+    // Reiniciar temporizadores para evitar dim/sleep inmediato
+    startTime = millis();
+    dimmed = false;
+    M5.Lcd.setBrightness(255);  // Restaurar brillo máximo al interactuar
+}
+  else {
+   allWhite = false; 
+  }
+
+  float temp = 0.0, hum = 0.0, pres = 0.0;
+  
+  // Actualizar y leer los valores del sensor
+  if (sht30.update() && qmp6988.update()) {
+    temp = sht30.cTemp;
+    hum = sht30.humidity;
+    pres = qmp6988.pressure / 100.0f;  // Convertir de Pa a hPa
+
+    if (!dimmed && (millis() - startTime > dimTimeout)) {
+    M5.Lcd.setBrightness(50);  // Bajar el brillo a 50 (ajusta este valor según prefieras, 0-255)
+    dimmed = true;
+    }
+    
+
+
+    M5.Lcd.fillRect(0, 30, M5.Lcd.width(), M5.Lcd.height() - 30, TFT_BLACK); // Limpiar el área de datos
+    
+   if (allWhite) {
+      M5.Lcd.setTextColor(TFT_WHITE);
+    } else {
+      M5.Lcd.setTextColor(TFT_RED); 
+    }
+
+    M5.Lcd.setCursor(M5.Lcd.width() / 20, 80);
+    M5.Lcd.printf("Temperatura: %.2f °C", temp);
+    
+    if (allWhite) {
+      M5.Lcd.setTextColor(TFT_WHITE);
+    } else {
+      M5.Lcd.setTextColor(TFT_SKYBLUE); 
+    }
+
+    M5.Lcd.setCursor(M5.Lcd.width() / 20, 120);
+    M5.Lcd.printf("Humedad: %.2f %%", hum);
+    
+    if (allWhite) {
+      M5.Lcd.setTextColor(TFT_WHITE);
+    } else {
+      M5.Lcd.setTextColor(TFT_PURPLE); 
+    }
+
+    M5.Lcd.setCursor(M5.Lcd.width() / 20, 160);
+    M5.Lcd.printf("Presion: %.2f hPa", pres);
+    
+    if (allWhite) {
+      M5.Lcd.setTextColor(TFT_WHITE);
+    } else {
+      M5.Lcd.setTextColor(TFT_GREEN); 
+    }
+
+    M5.Lcd.setCursor(M5.Lcd.width() / 20, 40);
+    M5.Lcd.printf("Bateria: %d %%", battery);
+
+    //M5.Lcd.setTextColor(TFT_WHITE); 
+    //M5.Lcd.setCursor(M5.Lcd.width() / 20, 180);
+    //M5.Lcd.printf("Tonto quien lo lea");
+  } else {
+    M5.Lcd.fillRect(0, 30, M5.Lcd.width(), M5.Lcd.height() - 30, TFT_BLACK);
+    M5.Lcd.setCursor(M5.Lcd.width() / 20, 60);
+    M5.Lcd.println("Error de lectura del sensor.");
+  }
+  
+  delay(2000); // Esperar 2 segundos antes de la siguiente lectura
+}
+
