@@ -1,0 +1,5 @@
+#define CFG_eu868 1          // Regió Europa
+#define CFG_sx1276_radio 1   // Tipus de ràdio (Ra-01/RFM95/SX1276)
+#define DISABLE_PING         // Desactiva ping slots (recomanat per TTN)
+#define DISABLE_BEACONS      // Desactiva beacons
+// #define LMIC_DEBUG_LEVEL 2 // Opcional: més debug (ja ho tens al build_flags)
